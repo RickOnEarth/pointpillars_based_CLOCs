@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="95da84bd-b066-4aa6-ab8f-2508657c265f" name="AIStation">
+        <fileTransfer rootFolder="/mnt/inspurfs/user-fs/mengxing" accessType="SFTP" host="172.171.32.181" port="22" sshConfigId="352462db-e0b8-4df8-92c5-145fbbf77601" sshConfig="mengxing@172.171.32.181:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

@@ -1,0 +1,1 @@
+python ./pytorch/train_Re.py evaluate --config_path=./configs/pointpillars/car/CLOCs_xyres_16.proto --model_dir=model_dir_temp
