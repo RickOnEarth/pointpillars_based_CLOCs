@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 
 #MX self define
-#second/model_dirs/*
+second/model_dirs/*

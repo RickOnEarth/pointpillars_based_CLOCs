@@ -60,8 +60,8 @@ model: {
     use_multi_class_nms: false
     nms_pre_max_size: 1000
     nms_post_max_size: 300             #MX original 300
-    nms_score_threshold: 0.05           #MX original 0.05
-    nms_iou_threshold: 0.5            #MX original 0.5          #MX：这一块需要改，降低阈值
+    nms_score_threshold: 0.5           #MX original 0.05
+    nms_iou_threshold: 0.5            #MX original 0.5
 
     use_bev: false
     num_point_features: 4

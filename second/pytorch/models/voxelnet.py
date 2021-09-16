@@ -521,8 +521,8 @@ class VoxelNet(nn.Module):
                  multiclass_nms=False,
                  nms_score_threshold=0.5,
                  nms_pre_max_size=1000,
-                 nms_post_max_size=20,
-                 nms_iou_threshold=0.1,
+                 nms_post_max_size=200,     #20
+                 nms_iou_threshold=0.5,     #0.1
                  target_assigner=None,
                  use_bev=False,
                  lidar_only=False,
