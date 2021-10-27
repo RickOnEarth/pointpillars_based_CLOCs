@@ -125,15 +125,18 @@ def image_box_overlap(boxes, query_boxes, criterion=-1):
 # pang added to build the tensor for the second stage of training
 @numba.jit(nopython=True,parallel=True)
 def build_stage2_training(boxes, query_boxes, criterion, scores_3d, scores_2d, dis_to_lidar_3d,overlaps,tensor_index):
-    N = boxes.shape[0] #70400
+    N = boxes.shape[0] #70400 #107136
     K = query_boxes.shape[0] #30
-    max_num = 900000
+    max_num = 8900000               #900000
     ind=0
     ind_max = ind
     for k in range(K):
         qbox_area = ((query_boxes[k, 2] - query_boxes[k, 0]) *
                      (query_boxes[k, 3] - query_boxes[k, 1]))
         for n in range(N):
+            #MX
+            assert ind < max_num
+
             iw = (min(boxes[n, 2], query_boxes[k, 2]) -
                   max(boxes[n, 0], query_boxes[k, 0]))
             if iw > 0:

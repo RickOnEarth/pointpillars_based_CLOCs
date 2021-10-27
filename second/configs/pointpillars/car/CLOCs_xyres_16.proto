@@ -59,9 +59,9 @@ model: {
     use_rotate_nms: false
     use_multi_class_nms: false
     nms_pre_max_size: 1000
-    nms_post_max_size: 300             #MX original 300
-    nms_score_threshold: 0.5           #MX original 0.05
-    nms_iou_threshold: 0.5            #MX original 0.5
+    nms_post_max_size: 100             #MX original pp 300 CLOCs 100
+    nms_score_threshold: 0.2           #MX original pp 0.05 CLOCs 0.2       #score 0.2, iou 0.5时效果最好
+    nms_iou_threshold: 0.5            #MX original pp 0.5 CLOCs 0.01
 
     use_bev: false
     num_point_features: 4
@@ -177,7 +177,6 @@ train_config: {
   }
 
   inter_op_parallelism_threads: 4
-  intra_op_parallelism_threads: 4
   steps: 37120 #112215 #113715 #111360 # 619 * 50, super converge. increase this to achieve slightly better results original 30950
   steps_per_eval: 3712 #MX3712 #7481 # 619 * 5
   save_checkpoints_secs : 1800 # half hour 1800

@@ -1,4 +1,5 @@
 import math
+import time
 from functools import reduce
 
 import numpy as np
@@ -349,12 +350,18 @@ def center_to_corner_box2d(centers, dims, angles=None, origin=0.5):
     return corners
 
 
-def project_to_image(points_3d, proj_mat):
-    points_num = list(points_3d.shape)[:-1]
-    points_shape = np.concatenate([points_num, [1]], axis=0).tolist()
+def project_to_image(points_3d, proj_mat):  #0.5ms
+    points_num = list(points_3d.shape)[:-1]                             #points_num=[107136, 8], points_3d.shape=[107136, 8, 3]
+    points_shape = np.concatenate([points_num, [1]], axis=0).tolist()   #points_shape=[107136, 8, 1]
+
+    #fourth_list = torch.zeros(*points_shape).type_as(points_3d)                                  #200ms+
+    fourth_list = torch.zeros(*points_shape, dtype=points_3d.dtype, device=points_3d.device)      #0.5ms #torch.float32, cuda:0
+
     points_4 = torch.cat(
-        [points_3d, torch.zeros(*points_shape).type_as(points_3d)], dim=-1)
+        [points_3d, fourth_list], dim=-1)             #points_4.shape=[107136, 8, 4]
+
     # point_2d = points_4 @ tf.transpose(proj_mat, [1, 0])
+
     point_2d = torch.matmul(points_4, proj_mat.t())
     point_2d_res = point_2d[..., :2] / point_2d[..., 2:3]
     return point_2d_res
@@ -370,8 +377,10 @@ def camera_to_lidar(points, r_rect, velo2cam):
 
 def lidar_to_camera(points, r_rect, velo2cam):
     num_points = points.shape[0]
+    # points = torch.cat(
+    #     [points, torch.ones(num_points, 1).type_as(points)], dim=-1)
     points = torch.cat(
-        [points, torch.ones(num_points, 1).type_as(points)], dim=-1)
+        [points, torch.ones(num_points, 1, dtype=points.dtype, device=points.device)], dim=-1)
     camera_points = points @ (r_rect @ velo2cam).t()
     return camera_points[..., :3]
 

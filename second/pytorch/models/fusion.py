@@ -42,13 +42,13 @@ class fusion(nn.Module):
     def forward(self,input_1,tensor_index):
         t1 = time.time()
         flag = -1
-        if tensor_index[0,0] == -1:
-            out_1 = torch.zeros(1,200,70400,dtype = input_1.dtype,device = input_1.device)
+        if tensor_index[0,0] == -1:         #tensor_index[0,0]=0
+            out_1 = torch.zeros(1,200,107136,dtype = input_1.dtype,device = input_1.device)
             out_1[:,:,:] = -9999999
             flag = 0
         else:
-            x = self.fuse_2d_3d(input_1)
-            out_1 = torch.zeros(1,200,70400,dtype = input_1.dtype,device = input_1.device)
+            x = self.fuse_2d_3d(input_1)        #input例：[1, 4, 1, 193283],4 channel,1*193283
+            out_1 = torch.zeros(1,200,107136,dtype = input_1.dtype,device = input_1.device)
             out_1[:,:,:] = -9999999
             out_1[:,tensor_index[:,0],tensor_index[:,1]] = x[0,:,0,:]
             flag = 1

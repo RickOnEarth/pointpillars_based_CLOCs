@@ -775,7 +775,7 @@ class VoxelNet(nn.Module):
             middle_predictions = f_detection_result[predicted_class_index, :].reshape(-1, 5)
             top_predictions = middle_predictions[np.where(middle_predictions[:, 4] >= -100)]         #这里把所有的2d检测的middle_predictions都保留了（可自己设条件处理，如排序保留固定数目）
 
-            res, iou_test, tensor_index = self.train_stage_2(example, preds_dict, top_predictions)
+            res, iou_test, tensor_index = self.train_stage_2(example, preds_dict, top_predictions)      #500ms
 
             return res, preds_dict, top_predictions, iou_test, tensor_index
 
@@ -796,7 +796,7 @@ class VoxelNet(nn.Module):
         ########################
         #讨巧的方法，先取前70400个anchor套用原来的代码
         ########################
-        batch_anchors = batch_anchors[:, :70400, :]
+        #batch_anchors = batch_anchors[:, :70400, :]
 
         """
         batch_anchors:
@@ -810,7 +810,9 @@ class VoxelNet(nn.Module):
        device='cuda:0')
 
         """
-        batch_anchors_reshape = batch_anchors.reshape(1,200,176,14)
+        #batch_anchors_reshape = batch_anchors.reshape(1,200,176,14)     #执行完后batch_anchors.shape:[1, 70400, 7] #batch_anchors_reshape.shape:[1, 200, 176, 14] #248*216
+        batch_anchors_reshape = batch_anchors.reshape(1, 248, 216, 14)     #执行完后batch_anchors.shape:[1, 70400, 7] #batch_anchors_reshape.shape:[1, 200, 176, 14] #248*216
+
         batch_rect = example[11]                             #rect 4*4 矩阵, shape: [1, 4, 4]
         batch_Trv2c = example[12]                           #Tr_velo_2_cam, 4*4矩阵
         batch_P2 = example[13]                                 #imge_2 prject矩阵，这里用的4*4
@@ -832,7 +834,7 @@ class VoxelNet(nn.Module):
         batch_imgidx = example[14]
 
         t2 = time.time()
-        # print("train_stage_2 t2-t1 time: ", (t2-t1)*1000)
+        #print("train_stage_2 t2-t1 time: ", (t2-t1)*1000)              #0.03ms
 
         t = time.time()
 
@@ -845,7 +847,7 @@ class VoxelNet(nn.Module):
         ########################
         #讨巧的方法，先取前70400个套用原来的代码
         ########################
-        batch_box_preds = batch_box_preds[:, :70400, :]    #shape: [1, 70400, 7]
+        #batch_box_preds = batch_box_preds[:, :70400, :]    #shape: [1, 70400, 7]
 
         num_class_with_bg = self._num_class                              #num_class_with_bg = 1
         if not self._encode_background_as_zeros:        #not True
@@ -859,7 +861,7 @@ class VoxelNet(nn.Module):
         ########################
         # 讨巧的方法，先取前70400个套用原来的代码
         ########################
-        batch_cls_preds = batch_cls_preds[:, :70400, :]              #batch_cls_preds.shape:[1, 70400, 1]
+        #batch_cls_preds = batch_cls_preds[:, :70400, :]              #batch_cls_preds.shape:[1, 70400, 1]
         # print("batch_cls_preds.shape:\n", batch_cls_preds.shape)
         batch_box_preds = self._box_coder.decode_torch(batch_box_preds,
                                                        batch_anchors)
@@ -869,7 +871,7 @@ class VoxelNet(nn.Module):
         """
 
         t3 = time.time()
-        # print("train_stage_2 t3-t2 time: ", (t3-t2)*1000)                       #4ms
+        #print("train_stage_2 t3-t2 time: ", (t3-t2)*1000)                       #0.7ms
 
         if self._use_direction_classifier:                                      #True
             batch_dir_preds = preds_dict[2]   #preds_dict["dir_cls_preds"]
@@ -877,37 +879,19 @@ class VoxelNet(nn.Module):
             ########################
             # 讨巧的方法，先取前70400个套用原来的代码
             ########################
-            batch_dir_preds = batch_dir_preds[:, :70400, :]
+            #batch_dir_preds = batch_dir_preds[:, :70400, :]
         else:
             batch_dir_preds = [None] * batch_size
 
         t4 = time.time()
-        # print("train_stage_2 t4 -t3 time: ", (t4-t3)*1000)                      #0.024ms
+        # print("train_stage_2 t4 -t3 time: ", (t4-t3)*1000)                      #0.02ms
 
         predictions_dicts = []
         i = 0
 
-        for box_preds, cls_preds, dir_preds, rect, Trv2c, P2, img_idx, a_mask in zip(
+        for box_preds, cls_preds, dir_preds, rect, Trv2c, P2, img_idx, a_mask in zip(       #最外层是1，没有循环，只执行一次
                 batch_box_preds, batch_cls_preds, batch_dir_preds, batch_rect,
                 batch_Trv2c, batch_P2, batch_imgidx, batch_anchors_mask):
-
-            # print("box_preds.shape@@:\n", box_preds.shape)
-            # print("box_preds@@:\n", box_preds)
-            # print("cls_preds.shape@@:\n", cls_preds.shape)
-            # print("cls_preds@@:\n", cls_preds)
-            # print("dir_preds.shape@@:\n", dir_preds.shape)
-            # print("dir_preds@@:\n", dir_preds)
-            # print("rect.shape@@:\n", rect.shape)
-            # print("rect@@:\n", rect)
-            # print("Trv2c.shape@@:\n", Trv2c.shape)
-            # print("Trv2c@@:\n", Trv2c)
-            # print("P2.shape@@:\n", P2.shape)
-            # print("P2@@:\n", P2)
-            # print("img_idx.shape@@:\n", img_idx.shape)
-            # print("img_idx@@:\n", img_idx)
-            # #print("a_mask.shape@@:\n", a_mask.shape)
-            # print("a_mask@@:\n", a_mask)
-
 
             t5 = time.time()
             if a_mask is not None:                  #a_mask is None, 不执行
@@ -937,14 +921,12 @@ class VoxelNet(nn.Module):
             # finally generate predictions.
             final_box_preds = box_preds
             final_scores = total_scores
-            # print("final_box_preds:\n", final_box_preds)
-            # print("rect:\n", rect)
-            # print("Trv2c:\n", Trv2c)
+
             final_box_preds_camera = box_torch_ops.box_lidar_to_camera(
                 final_box_preds, rect, Trv2c)
 
             t_temp = time.time()
-            # print("box lidar to camera time: ", (t_temp - t5_1)*1000)                   #40~150ms，偶尔4ms
+            # print("box lidar to camera time: ", (t_temp - t5_1)*1000)                   #0.3ms
 
             locs = final_box_preds_camera[:, :3]
             dims = final_box_preds_camera[:, 3:6]
@@ -953,20 +935,20 @@ class VoxelNet(nn.Module):
             box_corners = box_torch_ops.center_to_corner_box3d(
                 locs, dims, angles, camera_box_origin, axis=1)
 
-            # print("center_to_corner_box3d time: ", (time.time() - t_temp)*1000)         #绝大部分1~3ms，有时也会96ms左右
+            #print("center_to_corner_box3d time: ", (time.time() - t_temp)*1000)         #绝大部分0.7~3ms
             t_temp = time.time()
 
-            # print("box_corners length: ", len(box_corners))
+            # print("box_corners length: ", len(box_corners))           #107136
             # print("box_corners: ", box_corners)
-            # print("P2 length: ", len(P2))
+            # print("P2 length: ", len(P2))                             #4
             # print("P2: ", P2)
             box_corners_in_image = box_torch_ops.project_to_image(
                 box_corners, P2)
 
-            # print("project_to_image time: ", (time.time()-t_temp)*1000)                     #50~200ms,有时也会3ms 4ms
+            #print("project_to_image time: ", (time.time()-t_temp)*1000)                     #0.5ms
 
             t5_1_1 = time.time()
-            # print("t5_1_1 - t_5_1 time: ", (t5_1_1-t5_1)*1000)                              #几乎等于t52 - t51 time，140~350ms
+            #print("t5_1_1 - t5_1 time: ", (t5_1_1-t5_1)*1000)                              #1~3ms
 
             # box_corners_in_image: [N, 8, 2]
             minxy = torch.min(box_corners_in_image, dim=1)[0]
@@ -994,8 +976,8 @@ class VoxelNet(nn.Module):
             predictions_dicts.append(predictions_dict)
 
             t5_2 = time.time()
-            # print("t52 - t51 time: ", (t5_2-t5_1)*1000)                            #140~350ms
-
+            #print("t52 - t5_1_1 time: ", (t5_2-t5_1_1)*1000)                            #0.4ms
+            t_np_1 = time.time()
             dis_to_lidar = torch.norm(box_preds[:,:2],p=2,dim=1,keepdim=True)/82.0
             box_2d_detector = np.zeros((200, 4))
             box_2d_detector[0:top_predictions.shape[0],:]=top_predictions[:,:4]
@@ -1003,34 +985,23 @@ class VoxelNet(nn.Module):
             box_2d_scores = top_predictions[:,4].reshape(-1,1)
             time_iou_build_start=time.time()
 
-            t_np_1 = time.time()
-            overlaps1 = np.zeros((900000,4),dtype=box_2d_preds.detach().cpu().numpy().dtype)
-            tensor_index1 = np.zeros((900000,2),dtype=box_2d_preds.detach().cpu().numpy().dtype)
-            t_np_2 = time.time()
-            # print("t_np_2 - t_np_2 time:\n", (t_np_2 - t_np_1) * 1000)                      #100~200ms
+            #overlaps1 = np.zeros((8900000,4),dtype=box_2d_preds.detach().cpu().numpy().dtype)               #900000
+            #tensor_index1 = np.zeros((8900000,2),dtype=box_2d_preds.detach().cpu().numpy().dtype)           #900000
+            overlaps1 = np.zeros((8900000,4),dtype=np.float32)               #900000
+            tensor_index1 = np.zeros((8900000,2),dtype=np.int64)           #900000
 
-            overlaps1[:,:] = -1
-            tensor_index1[:,:] = -1
+            t_np_2 = time.time()
+            #print("t_np_2 - t_np_2 time:\n", (t_np_2 - t_np_1) * 1000)
+
+
+            # overlaps1[:,:] = -1
+            # tensor_index1[:,:] = -1
             t_np_3 = time.time()
-            # print("t_np_3 - t_np_2 time:\n", (t_np_3 - t_np_2) * 1000)                      #4ms
+            # print("t_np_3 - t_np_2 time:\n", (t_np_3 - t_np_2) * 1000)
             #final_scores[final_scores<0.1] = 0
             #box_2d_preds[(final_scores<0.1).reshape(-1),:] = 0
-
             t5_3 = time.time()
-            # print("t53 - t52 time: ", (t5_3 - t5_2)*1000)                                   #一般100~200ms
-
-
-            # print(" final_scores.shape:\n", final_scores.shape)
-            # print(" final_scores:\n", final_scores)
-            #
-            # print(" dis_to_lidar.shape:\n", dis_to_lidar.shape)
-            # print(" dis_to_lidar:\n", dis_to_lidar)
-            # print(" overlaps1.shape:\n", overlaps1.shape)
-            # print(" overlaps1:\n", overlaps1)
-            #
-            # print("tensor_index1.shape:\n", tensor_index1.shape)
-            # print("tensor_index1:\n", tensor_index1)
-
+            #print("t53 - t52 time: \n", (t5_3 - t5_2)*1000)                                   #0.15ms
 
             iou_test,tensor_index, max_num = se.build_stage2_training(box_2d_preds.detach().cpu().numpy(),
                                                 box_2d_detector,
@@ -1043,13 +1014,19 @@ class VoxelNet(nn.Module):
             time_iou_build_end=time.time()
 
             t5_4 = time.time()
-            # print("t54 - t53 time: ", (t5_4-t5_3)*1000)                                     #9~120ms, 一般十几ms
+            #print("t54 - t53 time: ", (t5_4-t5_3)*1000)                                     #9~120ms, 一般十几ms!!!10_13
 
-            iou_test_tensor = torch.FloatTensor(iou_test)  #iou_test_tensor shape: [160000,4]
-            tensor_index_tensor = torch.LongTensor(tensor_index)
+            iou_test_tensor = torch.FloatTensor(iou_test)  #iou_test_tensor shape: [160000,4]   #0.03ms
+
+            t_temp = time.time()
+            tensor_index_tensor = torch.LongTensor(tensor_index)            #260ms
+            #print("t_temp time: ", (time.time() - t_temp) * 1000)
+
             iou_test_tensor = iou_test_tensor.permute(1,0)
-            iou_test_tensor = iou_test_tensor.reshape(1,4,1,900000)
+            iou_test_tensor = iou_test_tensor.reshape(1,4,1,8900000)            #900000
             tensor_index_tensor = tensor_index_tensor.reshape(-1,2)
+
+
             if max_num == 0:
                 non_empty_iou_test_tensor = torch.zeros(1,4,1,2)
                 non_empty_iou_test_tensor[:,:,:,:] = -1
@@ -1060,8 +1037,8 @@ class VoxelNet(nn.Module):
                 non_empty_tensor_index_tensor = tensor_index_tensor[:max_num,:]
             i += 1
             t6 = time.time()
-            # print("t6 - t54 time: ", (t6-t5_4)*1000)                                         #1~90ms,大概率70~80ms
-            # print("loop ", i, "total time: ", (t6-t5)*1000)
+            #print("t6 - t54 time: ", (t6-t5_4)*1000)                                         #260ms
+            #print("loop ", i, "total time: ", (t6-t5)*1000)
 
         return predictions_dicts, non_empty_iou_test_tensor, non_empty_tensor_index_tensor
 
