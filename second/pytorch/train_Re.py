@@ -334,6 +334,7 @@ def train(config_path,
                         net.clear_metrics()
                     data_iter = iter(dataloader)
                     example = next(data_iter)
+
                 example_torch = example_convert_to_torch(example, float_dtype)
 
                 # print("example_torch['image_idx']:\n", example_torch["image_idx"])
@@ -403,12 +404,6 @@ def train(config_path,
                                                                                                            detection_2d_path)
                 d3_gt_boxes = example_torch["d3_gt_boxes"][0, :, :]
 
-
-                ########################
-                # 必要时，讨巧的方法，先取前70400个套用原来的代码
-                #all_3d_output是voxelnet.py中的preds_dict = self.rpn(spatial_features)
-                ########################
-
                 if d3_gt_boxes.shape[0] == 0:
                     target_for_fusion = np.zeros((1,107136,1))
                     positives = torch.zeros(1,107136).type(torch.float32).cuda()
@@ -432,15 +427,20 @@ def train(config_path,
                     positives = torch.from_numpy(positive_index).type(torch.float32).cuda()
                     negative_index = ((iou_bev_max <= 0.5)*1).reshape(1,-1)
                     negative_index = negative_index.astype(np.float32)                          ##不加这3个转换在torch中转换的话一共慢200~300ms
-                    negatives = torch.from_numpy(negative_index).type(torch.float32).cuda()
+                    negatives = torch.from_numpy(negative_index).type(torch.float32).cuda()     #[1, 107136]
 
                 cls_preds, flag = fusion_layer(fusion_input.cuda(), tensor_index.cuda())
                 one_hot_targets = torch.from_numpy(target_for_fusion).type(torch.float32).cuda()
 
+                print("negatives.shape: \n", negatives.shape)
                 negative_cls_weights = negatives.type(torch.float32) * 1.0
+                print("negative_cls_weights: \n", negative_cls_weights)
                 cls_weights = negative_cls_weights + 1.0 * positives.type(torch.float32)
-                pos_normalizer = positives.sum(1, keepdim=True).type(torch.float32)
+                print("cls_weights: \n", cls_weights)
+                pos_normalizer = positives.sum(1, keepdim=True).type(torch.float32)         #例：[[28.]]
+                print("pos_normalizer:\n", pos_normalizer)
                 cls_weights /= torch.clamp(pos_normalizer, min=1.0)
+                print("cls_weights final:\n", cls_weights)
                 if flag == 1:
                     cls_losses = focal_loss._compute_loss(cls_preds, one_hot_targets, cls_weights.cuda())  # [N, M]
                     cls_losses_reduced = cls_losses.sum() / example_torch['labels'].shape[0]
@@ -471,12 +471,6 @@ def train(config_path,
 
                     ckpt_start_time = time.time()
 
-                #
-                # print("train, reeeeeeeeeeeeturn")
-                # print("train, reeeeeeeeeeeeturn")
-                # print("train, reeeeeeeeeeeeturnnn")
-                # # return
-                # exit()
             total_step_elapsed += steps
 
             torchplus.train.save_models(model_dir, [fusion_layer, optimizer],
@@ -750,11 +744,12 @@ def predict_kitti_to_anno(net,
              num_points_per_pillar, x_sub_shaped, y_sub_shaped,
              mask, coors, anchors, anchors_mask, rect, Trv2c, P2, image_idx, batch_image_shape]
 
-
     all_3d_output_camera_dict, all_3d_output, top_predictions, fusion_input, torch_index = net(input, detection_2d_path)
 
     fusion_cls_preds,flag = fusion_layer(fusion_input.cuda(),torch_index.cuda())
 
+
+    t1 = time.time()
     #fusion_cls_preds_reshape = fusion_cls_preds.reshape(1,200,176,2)
     fusion_cls_preds_reshape = fusion_cls_preds.reshape(1,248,216,2)
 
@@ -768,9 +763,15 @@ def predict_kitti_to_anno(net,
     all_3d_output_dict["cls_preds"] = all_3d_output[1]
     all_3d_output_dict["dir_cls_preds"] = all_3d_output[2]
 
+    torch.cuda.synchronize()
+    t = time.time()
     predictions_dicts = predict_pp(net, example, all_3d_output_dict)
+    torch.cuda.synchronize()
+    net._total_predict_pp_time += time.time() - t
+    print("avg predict pp time: ", net._total_predict_pp_time/net._total_inference_count*1000)
+
     #print("predict_kitti_to_anno net time1: ", (time.time() - time1) * 1000)
-    test_mode=False
+    test_mode=True
     if test_mode==False:
         d3_gt_boxes = example["d3_gt_boxes"][0,:,:]
         if d3_gt_boxes.shape[0] == 0:
@@ -816,7 +817,6 @@ def predict_kitti_to_anno(net,
     else:
         cls_losses_reduced = 1000
     # print("cls_losses_reduced:\n", cls_losses_reduced)
-
 
     annos = []
     for i, preds_dict in enumerate(predictions_dicts):
@@ -879,6 +879,7 @@ def predict_kitti_to_anno(net,
         annos[-1]["image_idx"] = np.array(
             [img_idx] * num_example, dtype=np.int64)
         #cls_losses_reduced=100
+
     return annos, cls_losses_reduced
 
 
@@ -1042,7 +1043,8 @@ def evaluate(config_path,
     bar = ProgressBar()
     bar.start(len(eval_dataset) // input_cfg.batch_size + 1)
 
-    print("reeeeeeeeeeeeturn")
+    print("len eval_dataset", len(eval_dataset))
+    print("len eval_dataloader", len(eval_dataloader))
     #return
     val_loss_final = 0  #MX
     for example in iter(eval_dataloader):
@@ -1285,13 +1287,10 @@ def onnx_model_generate(config_path,
 
 
 def predict_pp(net, example, preds_dict):
-    # torch.cuda.synchronize()
-    t = time.time()
 
     batch_size = example['anchors'].shape[0]
     batch_anchors = example['anchors'].view(batch_size, -1, 7)
 
-    net._total_inference_count += batch_size
     batch_rect = example['rect']
     batch_Trv2c = example['Trv2c']
     batch_P2 = example['P2']
@@ -1310,8 +1309,6 @@ def predict_pp(net, example, preds_dict):
     # batch_imgidx = example['image_idx']
     batch_imgidx = example['image_idx']
 
-    #net._total_forward_time += time.time() - t
-    t = time.time()
     batch_box_preds = preds_dict["box_preds"]
     batch_cls_preds = preds_dict["cls_preds"]
     batch_box_preds = batch_box_preds.view(batch_size, -1,
@@ -1543,7 +1540,7 @@ def predict_pp(net, example, preds_dict):
             }
         predictions_dicts.append(predictions_dict)
         #predictions_dicts += (predictions_dict, )
-    #net._total_postprocess_time += time.time() - t
+
     return predictions_dicts
 
 

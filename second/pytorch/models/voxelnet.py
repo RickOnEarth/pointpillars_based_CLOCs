@@ -555,6 +555,7 @@ class VoxelNet(nn.Module):
         self._use_bev = use_bev
         self._total_forward_time = 0.0
         self._total_postprocess_time = 0.0
+        self._total_predict_pp_time = 0.0
         self._total_inference_count = 0
         self._num_input_features = num_input_features
         self._box_coder = target_assigner.box_coder
@@ -715,7 +716,8 @@ class VoxelNet(nn.Module):
         x_sub_shaped = example[5]
         y_sub_shaped = example[6]
         mask = example[7]
-
+        torch.cuda.synchronize()
+        t = time.time()
         voxel_features = self.voxel_feature_extractor(pillar_x, pillar_y, pillar_z, pillar_i,
                                                       num_points, x_sub_shaped, y_sub_shaped, mask)
 
@@ -730,15 +732,17 @@ class VoxelNet(nn.Module):
         # spatial_features input size is : [1, 64, 496, 432]
         preds_dict = self.rpn(spatial_features)
 
+        torch.cuda.synchronize()
+        self._total_forward_time += time.time() - t
+        print("batch size: ", example[9].shape[0])
+        self._total_inference_count += example[9].shape[0]
+        print("nnnn time:", time.time() - t)
+        print("total count:", self._total_inference_count)
+        print("avg nn time: ", self.avg_forward_time * 1000)
+
         # return preds_dict
         box_preds = preds_dict[0]
         cls_preds = preds_dict[1]
-
-        # print("preds_dict length\n", len(preds_dict))
-        # print("box_preds.shape\n", box_preds.shape)
-        # print("cls_preds.shape\n", cls_preds.shape)
-        # print("preds_dict[2].shape\n", preds_dict[2].shape)         #preds_dict['dir_cls_preds']?
-        # print("box_preds:\n", box_preds[0][0][:2])
 
         """
         box_preds.shape: [1, 248, 216, 14]
@@ -760,6 +764,7 @@ class VoxelNet(nn.Module):
             img_idx = example[14][0]
 
             detection_2d_result_path = pathlib.Path(detection_2d_path)
+
             detection_2d_file_name = f"{detection_2d_result_path}/{kitti.get_image_index_str(img_idx)}.txt"
             with open(detection_2d_file_name, 'r') as f:
                 lines = f.readlines()
@@ -775,7 +780,15 @@ class VoxelNet(nn.Module):
             middle_predictions = f_detection_result[predicted_class_index, :].reshape(-1, 5)
             top_predictions = middle_predictions[np.where(middle_predictions[:, 4] >= -100)]         #这里把所有的2d检测的middle_predictions都保留了（可自己设条件处理，如排序保留固定数目）
 
-            res, iou_test, tensor_index = self.train_stage_2(example, preds_dict, top_predictions)      #500ms
+            torch.cuda.synchronize()
+            t = time.time()
+
+            res, iou_test, tensor_index = self.train_stage_2(example, preds_dict, top_predictions)
+
+            torch.cuda.synchronize()
+            self._total_postprocess_time += time.time() - t
+            print("avg_postprocess_time: ", self.avg_postprocess_time * 1000)
+            #print("res.shape:\n", res.shape)
 
             return res, preds_dict, top_predictions, iou_test, tensor_index
 
@@ -863,6 +876,7 @@ class VoxelNet(nn.Module):
         ########################
         #batch_cls_preds = batch_cls_preds[:, :70400, :]              #batch_cls_preds.shape:[1, 70400, 1]
         # print("batch_cls_preds.shape:\n", batch_cls_preds.shape)
+
         batch_box_preds = self._box_coder.decode_torch(batch_box_preds,
                                                        batch_anchors)
         """
@@ -1044,13 +1058,10 @@ class VoxelNet(nn.Module):
 
 
     def predict(self, example, preds_dict):
-        torch.cuda.synchronize()
-        t = time.time()
 
         batch_size = self._batch_size
         batch_anchors = example[9].view(batch_size, -1, 7)
 
-        self._total_inference_count += batch_size
         batch_rect = example[11]
         batch_Trv2c = example[12]
         batch_P2 = example[13]
@@ -1063,8 +1074,6 @@ class VoxelNet(nn.Module):
         # batch_imgidx = example['image_idx']
         batch_imgidx = example[14]
 
-        self._total_forward_time += time.time() - t
-        t = time.time()
         batch_box_preds = preds_dict[0]
         batch_cls_preds = preds_dict[1]
         batch_box_preds = batch_box_preds.view(batch_size, -1,
@@ -1277,7 +1286,7 @@ class VoxelNet(nn.Module):
                 predictions_dict = (None, None, None, None, None, img_idx)
             # predictions_dicts.append(predictions_dict)
             predictions_dicts += (predictions_dict, )
-        self._total_postprocess_time += time.time() - t
+
         return predictions_dicts
 
     @property

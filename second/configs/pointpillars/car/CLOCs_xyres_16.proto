@@ -103,7 +103,7 @@ train_input_reader: {
   prefetch_size : 25
   max_number_of_voxels: 12000
   shuffle_points: true
-  num_workers: 2
+  num_workers: 8    #2
   groundtruth_localization_noise_std: [0.25, 0.25, 0.25]                #MX？？
   groundtruth_rotation_uniform_noise: [-0.15707963267, 0.15707963267]
   global_rotation_uniform_noise: [-0.78539816, 0.78539816]

@@ -15,6 +15,8 @@ if '/opt/ros/kinetic/lib/python2.7/dist-packages' in sys.path:
 class fusion(nn.Module):
     def __init__(self):
         super(fusion, self).__init__()
+        self._total_time = 0.0
+        self._total_count = 0
         self.name = 'fusion_layer'
         self.corner_points_feature = Sequential(
             nn.Conv2d(24,48,1),
@@ -40,6 +42,7 @@ class fusion(nn.Module):
 
 
     def forward(self,input_1,tensor_index):
+        torch.cuda.synchronize()
         t1 = time.time()
         flag = -1
         if tensor_index[0,0] == -1:         #tensor_index[0,0]=0
@@ -55,6 +58,8 @@ class fusion(nn.Module):
         x = self.maxpool(out_1)
         #x, _ = torch.max(out_1,1)
         x = x.squeeze().reshape(1,-1,1)
-        delta_t = time.time() - t1
-        # print("fusion layer forward_time: ", delta_t * 1000)
+        torch.cuda.synchronize()
+        self._total_time += time.time() - t1
+        self._total_count += 1          #batch size = 1
+        print("avg fusion time:", self._total_time/self._total_count*1000)
         return x, flag
