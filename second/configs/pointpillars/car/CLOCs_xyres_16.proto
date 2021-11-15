@@ -109,7 +109,7 @@ train_input_reader: {
   global_rotation_uniform_noise: [-0.78539816, 0.78539816]
   global_scaling_uniform_noise: [0.95, 1.05]
   global_random_rotation_range_per_object: [0, 0]
-  anchor_area_threshold: 1
+  anchor_area_threshold: 1             #注意：pointpillars中为1，SECOND与CLOCs中为-1.置-1，使example['anchors_mask']=None #MX：与preprocess.py中代码关联,>0的条件
   remove_points_after_sample: false
   groundtruth_points_drop_percentage: 0.0
   groundtruth_drop_max_keep_points: 15
@@ -196,7 +196,7 @@ eval_input_reader: {
   max_number_of_voxels: 12000
   shuffle_points: false
   num_workers: 3
-  anchor_area_threshold: 1          #MX：与preprocess.py中代码关联,>0的条件
+  anchor_area_threshold: 1          #注意：pointpillars中为1，SECOND与CLOCs中为-1.置-1，使example['anchors_mask']=None #MX：与preprocess.py中代码关联,>0的条件
   remove_environment: false
   kitti_info_path: "/mengxing/Data/Sets/kitti_pointpillars/kitti_infos_val.pkl"
   kitti_root_path: "/mengxing/Data/Sets/kitti_pointpillars"

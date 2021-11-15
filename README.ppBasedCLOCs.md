@@ -25,3 +25,21 @@ count the time
 nn: 10.9ms, processing before fusion: 21.5ms, fusion_layers: 2.4ms, post processing time: 5.7ms   
 !!注意：evaluate时要将predict_kitti_to_anno()中的test_mode改为True!! loss的计算会占满cpu  
 Training时test_mode置False
+
+
+## 2021-11-15
+fix the problem:  
+all_3d_output_dict.update({'cls_preds': fusion_cls_preds_reshape})     
+pretty good result:   
+‘
+Car AP@0.70, 0.70, 0.70:  
+bbox AP:96.76, 96.31, 94.09  
+bev  AP:93.85, 90.15, 89.80  
+3d   AP:89.68, 80.70, 77.92  
+aos  AP:96.56, 95.44, 92.93  
+Car AP@0.70, 0.50, 0.50:  
+bbox AP:96.76, 96.31, 94.09  
+bev  AP:97.14, 96.81, 96.59  
+3d   AP:97.12, 96.76, 96.46  
+aos  AP:96.56, 95.44, 92.93  
+’

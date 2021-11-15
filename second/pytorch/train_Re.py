@@ -356,23 +356,23 @@ def train(config_path,
                 """
                 batch_size = example["anchors"].shape[0]
 
-                example_tuple = list(example_torch.values())
-                example_tuple[13] = torch.from_numpy(example_tuple[13])
-                example_tuple[14] = torch.from_numpy(example_tuple[14])
+                # example_tuple = list(example_torch.values())
+                example_torch['image_idx'] = torch.from_numpy(example_torch['image_idx'])
+                example_torch['image_shape'] = torch.from_numpy(example_torch['image_shape'])
 
                 #######################
                 # get prediction_dicts
                 #######################
-                pillar_x = example_tuple[0][:, :, 0].unsqueeze(0).unsqueeze(0)
-                pillar_y = example_tuple[0][:, :, 1].unsqueeze(0).unsqueeze(0)
-                pillar_z = example_tuple[0][:, :, 2].unsqueeze(0).unsqueeze(0)
-                pillar_i = example_tuple[0][:, :, 3].unsqueeze(0).unsqueeze(0)
-                num_points_per_pillar = example_tuple[1].float().unsqueeze(0)
+                pillar_x = example_torch['voxels'][:, :, 0].unsqueeze(0).unsqueeze(0)
+                pillar_y = example_torch['voxels'][:, :, 1].unsqueeze(0).unsqueeze(0)
+                pillar_z = example_torch['voxels'][:, :, 2].unsqueeze(0).unsqueeze(0)
+                pillar_i = example_torch['voxels'][:, :, 3].unsqueeze(0).unsqueeze(0)
+                num_points_per_pillar = example_torch['num_points'].float().unsqueeze(0)
 
                 # Find distance of x, y, and z from pillar center
                 # assuming xyres_16.proto
-                coors_x = example_tuple[2][:, 3].float()
-                coors_y = example_tuple[2][:, 2].float()
+                coors_x = example_torch['coordinates'][:, 3].float()
+                coors_y = example_torch['coordinates'][:, 2].float()
                 x_sub = coors_x.unsqueeze(1) * 0.16 + 0.1
                 y_sub = coors_y.unsqueeze(1) * 0.16 + -39.9
                 ones = torch.ones([1, 100], dtype=torch.float32, device=pillar_x.device)
@@ -385,16 +385,17 @@ def train(config_path,
                 mask = mask.unsqueeze(1)
                 mask = mask.type_as(pillar_x)
 
-                coors = example_tuple[2]
-                anchors = example_tuple[6]
-                anchors_mask = example_tuple[7]
-                anchors_mask = torch.as_tensor(anchors_mask, dtype=torch.uint8, device=pillar_x.device)
-                anchors_mask = anchors_mask.byte()
-                rect = example_tuple[3]
-                Trv2c = example_tuple[4]
-                P2 = example_tuple[5]
-                image_idx = example_tuple[13]
-                batch_image_shape = example_tuple[14]
+                coors = example_torch['coordinates']
+                anchors = example_torch['anchors']
+                anchors_mask = None
+                if 'anchors_mask' in example_torch:
+                    anchors_mask = torch.as_tensor(example_torch['anchors_mask'], dtype=torch.uint8, device=pillar_x.device)
+                    anchors_mask = anchors_mask.byte()
+                rect = example_torch['rect']
+                Trv2c = example_torch['Trv2c']
+                P2 = example_torch['P2']
+                image_idx = example_torch['image_idx']
+                batch_image_shape = example_torch['image_shape']
 
                 input = [pillar_x, pillar_y, pillar_z, pillar_i,
                          num_points_per_pillar, x_sub_shaped, y_sub_shaped,
@@ -732,9 +733,13 @@ def predict_kitti_to_anno(net,
 
     coors = example['coordinates']
     anchors = example['anchors']
-    anchors_mask = example['anchors_mask']
-    anchors_mask = torch.as_tensor(anchors_mask, dtype=torch.uint8, device=pillar_x.device)
-    anchors_mask = anchors_mask.byte()
+
+    anchors_mask = None
+    if 'anchors_mask' in example:
+        anchors_mask = example['anchors_mask']
+        anchors_mask = torch.as_tensor(anchors_mask, dtype=torch.uint8, device=pillar_x.device)
+        anchors_mask = anchors_mask.byte()
+
     rect = example['rect']
     Trv2c = example['Trv2c']
     P2 = example['P2']
@@ -747,20 +752,18 @@ def predict_kitti_to_anno(net,
     all_3d_output_camera_dict, all_3d_output, top_predictions, fusion_input, torch_index = net(input, detection_2d_path)
 
     fusion_cls_preds,flag = fusion_layer(fusion_input.cuda(),torch_index.cuda())
+    print("fusion_cls_preds.shape: ", fusion_cls_preds.shape)
 
 
     t1 = time.time()
     #fusion_cls_preds_reshape = fusion_cls_preds.reshape(1,200,176,2)
     fusion_cls_preds_reshape = fusion_cls_preds.reshape(1,248,216,2)
 
-    # print("######all_3d_output:\n", all_3d_output)
-    # print("######all_3d_output:\n", all_3d_output[0].shape)
-    # print("######all_3d_output:\n", all_3d_output[1].shape)
-    # print("######all_3d_output:\n", all_3d_output[2].shape)
 
     all_3d_output_dict = {}
     all_3d_output_dict["box_preds"] = all_3d_output[0]
     all_3d_output_dict["cls_preds"] = all_3d_output[1]
+    all_3d_output_dict.update({'cls_preds': fusion_cls_preds_reshape})
     all_3d_output_dict["dir_cls_preds"] = all_3d_output[2]
 
     torch.cuda.synchronize()
@@ -1301,18 +1304,20 @@ def predict_pp(net, example, preds_dict):
     #assert 15==len(example), "somthing write with example size!"
     if "anchors_mask" not in example:
         batch_anchors_mask = [None] * batch_size
-        print("dasfasdafsdfasdfasdfs")
-        print("dasfasdafsdfasdfasdfs")
-        print("dasfasdafsdfasdfasdfs")
     else:
         batch_anchors_mask = example["anchors_mask"].view(batch_size, -1)
-    # batch_imgidx = example['image_idx']
+    # batch_anchors_mask = [None] * batch_size
+
     batch_imgidx = example['image_idx']
 
     batch_box_preds = preds_dict["box_preds"]
     batch_cls_preds = preds_dict["cls_preds"]
     batch_box_preds = batch_box_preds.view(batch_size, -1,
                                            net._box_coder.code_size)
+
+    print("achorss mast shape: ", batch_anchors_mask.shape)
+    print("batch_box_preds sshpe", batch_box_preds.shape)
+
     num_class_with_bg = net._num_class
     if not net._encode_background_as_zeros:
         num_class_with_bg = net._num_class + 1
@@ -1362,6 +1367,7 @@ def predict_pp(net, example, preds_dict):
         if a_mask is not None:
             box_preds = box_preds[a_mask]
             cls_preds = cls_preds[a_mask]
+            print("box_preds.shaaape: ", box_preds.shape)
 
         if net._use_direction_classifier:
             if a_mask is not None:

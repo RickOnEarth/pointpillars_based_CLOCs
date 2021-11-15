@@ -734,11 +734,8 @@ class VoxelNet(nn.Module):
 
         torch.cuda.synchronize()
         self._total_forward_time += time.time() - t
-        print("batch size: ", example[9].shape[0])
         self._total_inference_count += example[9].shape[0]
-        print("nnnn time:", time.time() - t)
-        print("total count:", self._total_inference_count)
-        print("avg nn time: ", self.avg_forward_time * 1000)
+        print("\navg nn time: ", self.avg_forward_time * 1000)
 
         # return preds_dict
         box_preds = preds_dict[0]
@@ -769,8 +766,8 @@ class VoxelNet(nn.Module):
             with open(detection_2d_file_name, 'r') as f:
                 lines = f.readlines()
             #MX:防止候选框太多。后面要改
-            if len(lines) > 50:
-                lines = lines[:50]
+            if len(lines) > 200:
+                lines = lines[:200]
             content = [line.strip().split(' ') for line in lines]
             predicted_class = np.array([x[0] for x in content], dtype='object')
             predicted_class_index = np.where(predicted_class == 'Car')
@@ -784,15 +781,16 @@ class VoxelNet(nn.Module):
             t = time.time()
 
             res, iou_test, tensor_index = self.train_stage_2(example, preds_dict, top_predictions)
-
             torch.cuda.synchronize()
+            print("train_stage_2 time: ", (time.time()-t)*1000)
             self._total_postprocess_time += time.time() - t
-            print("avg_postprocess_time: ", self.avg_postprocess_time * 1000)
+            print("avg_stage2_time: ", self.avg_postprocess_time * 1000)
             #print("res.shape:\n", res.shape)
 
             return res, preds_dict, top_predictions, iou_test, tensor_index
 
     def train_stage_2(self, example, preds_dict, top_predictions):
+
         # example = [0: pillar_x, 1: pillar_y, 2: pillar_z, 3: pillar_i,
         #          4: num_points_per_pillar, 5: x_sub_shaped, 6: y_sub_shaped, 7: mask,
         #          8: coors, 9: anchors, 10: anchors_mask, 11: rect,
@@ -839,22 +837,20 @@ class VoxelNet(nn.Module):
         # print("example[anchors_mask].shape:\n", example[10].shape)          #正常情况下[1, 107136]，这里截断为[1, 70400]
         # print("example[anchors_mask]:\n", sum(example[10][0]))              #222
         # print("example[anchors_mask]:\n", example[10][0])                   #[0, 0, .....,0]
-        # if example[10] is None:
-        #     batch_anchors_mask = [None] * batch_size
-        # else:
-        #     batch_anchors_mask = example[10].view(batch_size, -1)
-        batch_anchors_mask = [None] * batch_size        #MX 对不对呢？
+        if example[10] is None:
+            batch_anchors_mask = [None] * batch_size
+        else:
+            batch_anchors_mask = example[10].view(batch_size, -1)
+        # batch_anchors_mask = [None] * batch_size        #MX 对不对呢？
+
         batch_imgidx = example[14]
 
         t2 = time.time()
         #print("train_stage_2 t2-t1 time: ", (t2-t1)*1000)              #0.03ms
-
         t = time.time()
-
 
         batch_box_preds = preds_dict[0]         #preds_dict["box_preds"]
         batch_cls_preds = preds_dict[1]                      #preds_dict["cls_preds"]
-
 
         batch_box_preds = batch_box_preds.view(batch_size, -1, self._box_coder.code_size)
         ########################
@@ -863,8 +859,8 @@ class VoxelNet(nn.Module):
         #batch_box_preds = batch_box_preds[:, :70400, :]    #shape: [1, 70400, 7]
 
         num_class_with_bg = self._num_class                              #num_class_with_bg = 1
-        if not self._encode_background_as_zeros:        #not True
-            num_class_with_bg = self._num_class + 1
+        if not self._encode_background_as_zeros:
+            num_class_with_bg = self._num_class + 1     #不执行
         # print("num_class_with_bg:\n", num_class_with_bg)                 # =1
         #
         # print("batch_cls_preds.shape:&&&&:\n", batch_cls_preds.shape)
@@ -877,8 +873,10 @@ class VoxelNet(nn.Module):
         #batch_cls_preds = batch_cls_preds[:, :70400, :]              #batch_cls_preds.shape:[1, 70400, 1]
         # print("batch_cls_preds.shape:\n", batch_cls_preds.shape)
 
+
         batch_box_preds = self._box_coder.decode_torch(batch_box_preds,
-                                                       batch_anchors)
+                                                       batch_anchors)     #这里是class GroundBox3dCoderTorch(GroundBox3dCoder)中的decoder
+
         """
         batch_box_preds.shape: [1, 70400, 7]
 
@@ -896,22 +894,21 @@ class VoxelNet(nn.Module):
             #batch_dir_preds = batch_dir_preds[:, :70400, :]
         else:
             batch_dir_preds = [None] * batch_size
-
         t4 = time.time()
         # print("train_stage_2 t4 -t3 time: ", (t4-t3)*1000)                      #0.02ms
 
         predictions_dicts = []
-        i = 0
 
-        for box_preds, cls_preds, dir_preds, rect, Trv2c, P2, img_idx, a_mask in zip(       #最外层是1，没有循环，只执行一次
+        for box_preds, cls_preds, dir_preds, rect, Trv2c, P2, img_idx, a_mask in zip(       #有几个batch size就会循环几次
                 batch_box_preds, batch_cls_preds, batch_dir_preds, batch_rect,
                 batch_Trv2c, batch_P2, batch_imgidx, batch_anchors_mask):
 
             t5 = time.time()
-            if a_mask is not None:                  #a_mask is None, 不执行
-                box_preds = box_preds[a_mask]
-                cls_preds = cls_preds[a_mask]
-            box_preds = box_preds.float()                           #shape: [70400, 7]。因为for zip剥掉了[1,70400,7]中的1
+            # if a_mask is not None:
+            #     box_preds = box_preds[a_mask]
+            #     cls_preds = cls_preds[a_mask]
+
+            box_preds = box_preds.float()                           #shape: [70400, 7]
             cls_preds = cls_preds.float()                           #shape: [70400, 1]
             rect = rect.float()                                     #shape: [4, 4]
             Trv2c = Trv2c.float()                                   #shape: [4, 4]
@@ -987,22 +984,27 @@ class VoxelNet(nn.Module):
                 #"label_preds": label_preds,
                 "image_idx": img_idx,
             }
+
             predictions_dicts.append(predictions_dict)
 
             t5_2 = time.time()
             #print("t52 - t5_1_1 time: ", (t5_2-t5_1_1)*1000)                            #0.4ms
             t_np_1 = time.time()
             dis_to_lidar = torch.norm(box_preds[:,:2],p=2,dim=1,keepdim=True)/82.0
+
+            # box_2d_detection = np.zeros((200, 5))
+            # box_2d_detection[0:top_predictions.shape[0],:]=top_predictions[:,:5]
+            # box_2d_detector = box_2d_detection[:,:4]
             box_2d_detector = np.zeros((200, 4))
-            box_2d_detector[0:top_predictions.shape[0],:]=top_predictions[:,:4]
+            box_2d_detector[0:top_predictions.shape[0],:]=top_predictions[:,:4]     ##这里写错了，这一步多余
             box_2d_detector = top_predictions[:,:4]
             box_2d_scores = top_predictions[:,4].reshape(-1,1)
             time_iou_build_start=time.time()
 
-            #overlaps1 = np.zeros((8900000,4),dtype=box_2d_preds.detach().cpu().numpy().dtype)               #900000
-            #tensor_index1 = np.zeros((8900000,2),dtype=box_2d_preds.detach().cpu().numpy().dtype)           #900000
-            overlaps1 = np.zeros((8900000,4),dtype=np.float32)               #900000
-            tensor_index1 = np.zeros((8900000,2),dtype=np.int64)           #900000
+            #overlaps1 = np.zeros((1900000,4),dtype=box_2d_preds.detach().cpu().numpy().dtype)               #900000
+            #tensor_index1 = np.zeros((1900000,2),dtype=box_2d_preds.detach().cpu().numpy().dtype)           #900000
+            overlaps1 = np.zeros((10000000,4),dtype=np.float32)               #900000
+            tensor_index1 = np.zeros((10000000, 2), dtype=np.int64)  # 900000
 
             t_np_2 = time.time()
             #print("t_np_2 - t_np_2 time:\n", (t_np_2 - t_np_1) * 1000)
@@ -1017,30 +1019,49 @@ class VoxelNet(nn.Module):
             t5_3 = time.time()
             #print("t53 - t52 time: \n", (t5_3 - t5_2)*1000)                                   #0.15ms
 
-            iou_test,tensor_index, max_num = se.build_stage2_training(box_2d_preds.detach().cpu().numpy(),
+
+            box_2d_preds = box_2d_preds.detach().cpu().numpy()
+            final_scores = final_scores.detach().cpu().numpy()
+            dis_to_lidar = dis_to_lidar.detach().cpu().numpy()
+
+            # iou_test,tensor_index, max_num = se.build_stage2_training(box_2d_preds,
+            #                                     box_2d_detector,
+            #                                     -1,
+            #                                     final_scores,
+            #                                     box_2d_scores,
+            #                                     dis_to_lidar,
+            #                                     overlaps1,
+            #                                     tensor_index1)
+
+            print("aaa mask", a_mask)
+            mask = a_mask.detach().cpu().numpy()
+            print("maskdd ", mask)
+            iou_test,tensor_index, max_num = se.build_stage2_training_mx(box_2d_preds,
                                                 box_2d_detector,
                                                 -1,
-                                                final_scores.detach().cpu().numpy(),
+                                                final_scores,
                                                 box_2d_scores,
-                                                dis_to_lidar.detach().cpu().numpy(),
+                                                dis_to_lidar,
                                                 overlaps1,
-                                                tensor_index1)
+                                                tensor_index1,
+                                                mask)
+
+
             time_iou_build_end=time.time()
 
             t5_4 = time.time()
             #print("t54 - t53 time: ", (t5_4-t5_3)*1000)                                     #9~120ms, 一般十几ms!!!10_13
 
             iou_test_tensor = torch.FloatTensor(iou_test)  #iou_test_tensor shape: [160000,4]   #0.03ms
-
             t_temp = time.time()
-            tensor_index_tensor = torch.LongTensor(tensor_index)            #260ms
+            tensor_index_tensor = torch.LongTensor(tensor_index)
             #print("t_temp time: ", (time.time() - t_temp) * 1000)
-
             iou_test_tensor = iou_test_tensor.permute(1,0)
-            iou_test_tensor = iou_test_tensor.reshape(1,4,1,8900000)            #900000
+            iou_test_tensor = iou_test_tensor.reshape(1,4,1,10000000)            #900000
             tensor_index_tensor = tensor_index_tensor.reshape(-1,2)
 
-
+            torch.cuda.synchronize()
+            ttt = time.time()
             if max_num == 0:
                 non_empty_iou_test_tensor = torch.zeros(1,4,1,2)
                 non_empty_iou_test_tensor[:,:,:,:] = -1
@@ -1049,11 +1070,11 @@ class VoxelNet(nn.Module):
             else:
                 non_empty_iou_test_tensor = iou_test_tensor[:,:,:,:max_num]
                 non_empty_tensor_index_tensor = tensor_index_tensor[:max_num,:]
-            i += 1
             t6 = time.time()
             #print("t6 - t54 time: ", (t6-t5_4)*1000)                                         #260ms
             #print("loop ", i, "total time: ", (t6-t5)*1000)
-
+            torch.cuda.synchronize()
+            print("pppp time: ", (time.time()-ttt)*1000)
         return predictions_dicts, non_empty_iou_test_tensor, non_empty_tensor_index_tensor
 
 
