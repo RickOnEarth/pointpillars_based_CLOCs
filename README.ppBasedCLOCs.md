@@ -43,4 +43,4 @@ bev  AP:97.14, 96.81, 96.59
 3d   AP:97.12, 96.76, 96.46  
 aos  AP:96.56, 95.44, 92.93  
 ’  
-update train_stage2()/se.build_stage2_training_mx_v2()，high accuracy with fast speed.
+update train_stage2()/se.build_stage2_training_mx_v2()，high precision with fast speed.
