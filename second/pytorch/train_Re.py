@@ -759,7 +759,6 @@ def predict_kitti_to_anno(net,
     #fusion_cls_preds_reshape = fusion_cls_preds.reshape(1,200,176,2)
     fusion_cls_preds_reshape = fusion_cls_preds.reshape(1,248,216,2)
 
-
     all_3d_output_dict = {}
     all_3d_output_dict["box_preds"] = all_3d_output[0]
     all_3d_output_dict["cls_preds"] = all_3d_output[1]
