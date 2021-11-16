@@ -43,4 +43,10 @@ bev  AP:97.14, 96.81, 96.59
 3d   AP:97.12, 96.76, 96.46  
 aos  AP:96.56, 95.44, 92.93  
 ’  
-update train_stage2()/se.build_stage2_training_mx_v2()，high precision with fast speed.
+update train_stage2()/se.build_stage2_training_mx_v2()，high precision with fast speed（train_stage2()部分5.1ms）.  
+
+## 2021-11-16  
+在train_stage2()中，用anchors_mask与给定的score阈值来过滤box_preds，anchors_mask为False或score低于阈值的box_preds,  
+不进行后面的decoding和IoU运算。这样精度不变，速度更快（train_stage2()部分4.3ms）。  
+这个版本比较适合inference时用，training时用恐怕会有bug且training时不在意时间，感觉不要score_threshold更好。  
+这版代码仅供后面部署的时候参考吧。文件命名为voxel.py.faster_inference  
