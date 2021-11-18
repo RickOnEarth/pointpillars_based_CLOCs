@@ -257,7 +257,8 @@ def build_stage2_training_mx(boxes, query_boxes, criterion, scores_3d, scores_2d
 
 # pang added to build the tensor for the second stage of training
 @numba.jit(nopython=True,parallel=True)
-def build_stage2_training_mx_v2(boxes, query_boxes, criterion, scores_3d, scores_2d, dis_to_lidar_3d,overlaps,tensor_index, mask_idx):
+def build_stage2_training_mx_v2(boxes, query_boxes, criterion, scores_3d, scores_2d,
+                                dis_to_lidar_3d,overlaps,tensor_index, mask_idx, training_flag):
     N = boxes.shape[0] #70400 #107136
     K = query_boxes.shape[0] #30
     max_num = 10000000               #900000
@@ -269,16 +270,17 @@ def build_stage2_training_mx_v2(boxes, query_boxes, criterion, scores_3d, scores
         for n in range(N):
             #MX
             assert ind < max_num
-            if scores_3d[n,0] < 0.1:
-                # if k==K-1:
-                    # overlaps[ind,0] = -10
-                    # overlaps[ind,1] = scores_3d[n,0]
-                    # overlaps[ind,2] = -10
-                    # overlaps[ind,3] = dis_to_lidar_3d[n,0]
-                    # tensor_index[ind,0] = k
-                    # tensor_index[ind,1] = n
-                    # ind = ind+1
-                continue
+            if training_flag==False:
+                if scores_3d[n,0] < 0.1:
+                    # if k==K-1:
+                        # overlaps[ind,0] = -10
+                        # overlaps[ind,1] = scores_3d[n,0]
+                        # overlaps[ind,2] = -10
+                        # overlaps[ind,3] = dis_to_lidar_3d[n,0]
+                        # tensor_index[ind,0] = k
+                        # tensor_index[ind,1] = n
+                        # ind = ind+1
+                    continue
 
             iw = (min(boxes[n, 2], query_boxes[k, 2]) -
                   max(boxes[n, 0], query_boxes[k, 0]))
@@ -325,7 +327,6 @@ def build_stage2_training_mx_v2(boxes, query_boxes, criterion, scores_3d, scores
     if ind > ind_max:
         ind_max = ind
     return overlaps, tensor_index, ind
-
 
 # pang added to build the tensor for the second stage of training, added july 13 2019
 @numba.jit(nopython=True, parallel=True)

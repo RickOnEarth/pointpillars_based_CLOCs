@@ -735,7 +735,7 @@ class VoxelNet(nn.Module):
         torch.cuda.synchronize()
         self._total_forward_time += time.time() - t
         self._total_inference_count += example[9].shape[0]
-        print("\navg nn time: ", self.avg_forward_time * 1000)
+        #print("\navg nn time: ", self.avg_forward_time * 1000)
 
         # return preds_dict
         box_preds = preds_dict[0]
@@ -782,9 +782,9 @@ class VoxelNet(nn.Module):
 
             res, iou_test, tensor_index = self.train_stage_2(example, preds_dict, top_predictions)
             torch.cuda.synchronize()
-            print("train_stage_2 time: ", (time.time()-t)*1000)
+            #print("train_stage_2 time: ", (time.time()-t)*1000)
             self._total_postprocess_time += time.time() - t
-            print("avg_stage2_time: ", self.avg_postprocess_time * 1000)
+            #print("avg_stage2_time: ", self.avg_postprocess_time * 1000)
             #print("res.shape:\n", res.shape)
 
             return res, preds_dict, top_predictions, iou_test, tensor_index
@@ -809,7 +809,8 @@ class VoxelNet(nn.Module):
         batch_P2 = example[13]                                 #imge_2 prject矩阵，这里用的4*4
         batch_image_shape = example[15]
 
-        if example[10] is None:
+        training_flag = False
+        if example[10] is None or training_flag is True:
             batch_anchors_mask = [None] * batch_size
         else:
             batch_anchors_mask = example[10].view(batch_size, -1)
@@ -837,7 +838,7 @@ class VoxelNet(nn.Module):
         batch_box_preds = self._box_coder.decode_torch(batch_box_preds,   #0.6ms
                                                        batch_anchors)     #这里是class GroundBox3dCoderTorch(GroundBox3dCoder)中的decoder
         torch.cuda.synchronize()
-        print("decode torch time: ", (time.time() - ttt) * 1000)
+        #print("decode torch time: ", (time.time() - ttt) * 1000)
         t3 = time.time()
         #print("train_stage_2 t3-t2 time: ", (t3-t2)*1000)
 
@@ -993,7 +994,8 @@ class VoxelNet(nn.Module):
                                                 dis_to_lidar,
                                                 overlaps1,
                                                 tensor_index1,
-                                                mask_index)                         #此函数不到1ms，之后的代码0.07ms
+                                                mask_index,
+                                                training_flag)                         #此函数不到1ms，之后的代码0.07ms
 
             time_iou_build_end=time.time()
 

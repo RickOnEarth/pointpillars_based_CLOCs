@@ -129,7 +129,7 @@ def build_inference_net(config_path,
         text_format.Merge(proto_str, config)
 
     model_cfg = config.model.second
-    detection_2d_path = "../d2_detection_data"
+    # detection_2d_path = "../d2_detection_data"
     center_limit_range = model_cfg.post_center_limit_range
     voxel_generator = voxel_builder.build(model_cfg.voxel_generator)
     bv_range = voxel_generator.point_cloud_range[[0, 1, 3, 4]]
@@ -152,6 +152,7 @@ def build_inference_net(config_path,
     return net
 
 def train(config_path,
+          d2_path,
           model_dir,
           result_path=None,
           create_folder=False,
@@ -184,7 +185,8 @@ def train(config_path,
     model_cfg = config.model.second
     train_cfg = config.train_config
 
-    detection_2d_path = "../d2_detection_data"          #MX
+    # detection_2d_path = "../d2_detection_data"          #MX
+    detection_2d_path = d2_path
 
     class_names = list(input_cfg.class_names)       #CLOCs: class_names = target_assigner.classes
     #########################
@@ -407,8 +409,10 @@ def train(config_path,
 
                 if d3_gt_boxes.shape[0] == 0:
                     target_for_fusion = np.zeros((1,107136,1))
-                    positives = torch.zeros(1,107136).type(torch.float32).cuda()
-                    negatives = torch.zeros(1,107136).type(torch.float32).cuda()
+                    # positives = torch.zeros(1,107136).type(torch.float32).cuda()
+                    # negatives = torch.zeros(1,107136).type(torch.float32).cuda()  #这样会先在cpu上创建，然后搬到gpu，比较慢
+                    positives = torch.zeros(1, 107136, dtype=torch.float32, device="cuda:0")
+                    negatives = torch.zeros(1, 107136, dtype=torch.float32, device="cuda:0")
                     negatives[:,:] = 1
                 else:
                     d3_gt_boxes_camera = box_torch_ops.box_lidar_to_camera(
@@ -433,15 +437,15 @@ def train(config_path,
                 cls_preds, flag = fusion_layer(fusion_input.cuda(), tensor_index.cuda())
                 one_hot_targets = torch.from_numpy(target_for_fusion).type(torch.float32).cuda()
 
-                print("negatives.shape: \n", negatives.shape)
+                #print("negatives.shape: \n", negatives.shape)
                 negative_cls_weights = negatives.type(torch.float32) * 1.0
-                print("negative_cls_weights: \n", negative_cls_weights)
+                #print("negative_cls_weights: \n", negative_cls_weights)
                 cls_weights = negative_cls_weights + 1.0 * positives.type(torch.float32)
-                print("cls_weights: \n", cls_weights)
+                #print("cls_weights: \n", cls_weights)
                 pos_normalizer = positives.sum(1, keepdim=True).type(torch.float32)         #例：[[28.]]
-                print("pos_normalizer:\n", pos_normalizer)
+                #print("pos_normalizer:\n", pos_normalizer)
                 cls_weights /= torch.clamp(pos_normalizer, min=1.0)
-                print("cls_weights final:\n", cls_weights)
+                #print("cls_weights final:\n", cls_weights)
                 if flag == 1:
                     cls_losses = focal_loss._compute_loss(cls_preds, one_hot_targets, cls_weights.cuda())  # [N, M]
                     cls_losses_reduced = cls_losses.sum() / example_torch['labels'].shape[0]
@@ -457,7 +461,10 @@ def train(config_path,
                 t = time.time()
                 metrics = {}
                 global_step = net.get_global_step()
+
                 if global_step % display_step == 0:
+                    writer.add_scalar("cls_loss_sum/display_step(20)", cls_loss_sum / display_step, global_step)
+                    writer.add_scalar("learning_rate", float(optimizer.lr), global_step)
                     print("now it is", global_step, "steps", " and the cls_loss is :", cls_loss_sum / display_step,
                           "learning_rate: ", float(optimizer.lr), file=logf)
                     print("now it is", global_step, "steps", " and the cls_loss is :", cls_loss_sum / display_step,
@@ -752,8 +759,6 @@ def predict_kitti_to_anno(net,
     all_3d_output_camera_dict, all_3d_output, top_predictions, fusion_input, torch_index = net(input, detection_2d_path)
 
     fusion_cls_preds,flag = fusion_layer(fusion_input.cuda(),torch_index.cuda())
-    print("fusion_cls_preds.shape: ", fusion_cls_preds.shape)
-
 
     t1 = time.time()
     #fusion_cls_preds_reshape = fusion_cls_preds.reshape(1,200,176,2)
@@ -773,8 +778,8 @@ def predict_kitti_to_anno(net,
     print("avg predict pp time: ", net._total_predict_pp_time/net._total_inference_count*1000)
 
     #print("predict_kitti_to_anno net time1: ", (time.time() - time1) * 1000)
-    test_mode=True
-    if test_mode==False:
+    training_flag=False
+    if training_flag==True:
         d3_gt_boxes = example["d3_gt_boxes"][0,:,:]
         if d3_gt_boxes.shape[0] == 0:
             target_for_fusion = np.zeros((1,107136,1))
@@ -782,7 +787,6 @@ def predict_kitti_to_anno(net,
             negatives = torch.zeros(1,107136).type(torch.float64).cuda()
             negatives[:,:] = 1
         else:                                                               #do
-
             d3_gt_boxes_camera = box_torch_ops.box_lidar_to_camera(
                 d3_gt_boxes, example['rect'][0,:], example['Trv2c'][0,:])
             d3_gt_boxes_camera_bev = d3_gt_boxes_camera[:,[0,2,3,5,6]]
@@ -936,6 +940,7 @@ def get_prediction_dicts(net, example):
     return predictions_dicts
 
 def evaluate(config_path,
+             d2_path,
              model_dir,
              result_path=None,
              predict_test=False,
@@ -967,7 +972,8 @@ def evaluate(config_path,
     model_cfg = config.model.second
     train_cfg = config.train_config
 
-    detection_2d_path = "../d2_detection_data"          #MX
+    # detection_2d_path = "../d2_detection_data"          #MX
+    detection_2d_path = d2_path
 
     class_names = list(input_cfg.class_names)
     center_limit_range = model_cfg.post_center_limit_range
@@ -1786,5 +1792,4 @@ def predict_v2(net,example, preds_dict):
 
 
 if __name__ == '__main__':
-    print("mian")
     fire.Fire()

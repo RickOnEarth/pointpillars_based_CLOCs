@@ -50,3 +50,11 @@ update train_stage2()/se.build_stage2_training_mx_v2()，high precision with fas
 不进行后面的decoding和IoU运算。这样精度不变，速度更快（train_stage2()部分4.3ms）。  
 这个版本比较适合inference时用，training时用恐怕会有bug且training时不在意时间，感觉不要score_threshold更好。  
 这版代码仅供后面部署的时候参考吧。文件命名为voxel.py.faster_inference  
+
+## 2021-11-18  
+d2_detection_data_*的路径添加到参数中   
+‘python ./pytorch/train_Re.py train --config_path=PATH --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=PATH’  
+注意将train_Re.py与voxelnet.py中的training_flag置True  
+  
+‘python ./pytorch/train_Re.py evaluate --config_path=PATH --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=PATH’  
+注意将train_Re.py与voxelnet.py中的training_flag置False  

@@ -61,5 +61,5 @@ class fusion(nn.Module):
         torch.cuda.synchronize()
         self._total_time += time.time() - t1
         self._total_count += 1          #batch size = 1
-        print("avg fusion time:", self._total_time/self._total_count*1000)
+        #print("avg fusion time:", self._total_time/self._total_count*1000)
         return x, flag
