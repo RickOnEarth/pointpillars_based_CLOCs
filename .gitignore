@@ -133,4 +133,5 @@ second/model_dirs/*
 d2_detection_data_rcnn/*
 d2_detection_data_yolo_nms_0.6/*
 d2_detection_data_yolo_nms_0.8/*
+d2_detection_data_yolo_nms_0.45/*
 

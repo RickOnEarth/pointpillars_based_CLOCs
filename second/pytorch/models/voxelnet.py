@@ -741,6 +741,8 @@ class VoxelNet(nn.Module):
         box_preds = preds_dict[0]
         cls_preds = preds_dict[1]
 
+        return preds_dict              #for seperated CLOCs FUSION
+
         """
         box_preds.shape: [1, 248, 216, 14]
         cls_preds.shape: [1, 248, 216, 2]      #248*216*2=107136
