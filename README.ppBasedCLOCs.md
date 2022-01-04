@@ -53,8 +53,25 @@ update train_stage2()/se.build_stage2_training_mx_v2()，high precision with fas
 
 ## 2021-11-18  
 d2_detection_data_*的路径添加到参数中   
-‘python ./pytorch/train_Re.py train --config_path=PATH --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=PATH’  
+train:
+```bash
+python ./pytorch/train_Re.py train --config_path=PATH --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=PATH
+``` 
 注意将train_Re.py与voxelnet.py中的training_flag置True  
-  
-‘python ./pytorch/train_Re.py evaluate --config_path=PATH --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=PATH’  
+
+evaluate:
+```bash
+python ./pytorch/train_Re.py evaluate --config_path=PATH --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=PATH
+``` 
 注意将train_Re.py与voxelnet.py中的training_flag置False  
+
+inference:  
+```bash
+python ./pytorch/train_Re.py evaluate --config_path=PATH --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=PATH --predict_test=True
+```
+注意将train_Re.py与voxelnet.py中的training_flag置False   
+config中raw_data路径如下
+```text
+  kitti_info_path: "/mengxing/Data/Sets/raw_data/CLOCs_preprocess/object_format_2011_09_26_drive_0001/kitti_infos_test.pkl"
+  kitti_root_path: "/mengxing/Data/Sets/raw_data/CLOCs_preprocess/object_format_2011_09_26_drive_0001"
+```

@@ -405,6 +405,9 @@ def train(config_path,
 
                 all_3d_output_camera_dict, all_3d_output, top_predictions, fusion_input, tensor_index = net(input,
                                                                                                            detection_2d_path)
+
+                cls_preds, flag = fusion_layer(fusion_input.cuda(), tensor_index.cuda())
+
                 d3_gt_boxes = example_torch["d3_gt_boxes"][0, :, :]
 
                 if d3_gt_boxes.shape[0] == 0:
@@ -415,8 +418,10 @@ def train(config_path,
                     negatives = torch.zeros(1, 107136, dtype=torch.float32, device="cuda:0")
                     negatives[:,:] = 1
                 else:
+
                     d3_gt_boxes_camera = box_torch_ops.box_lidar_to_camera(
                         d3_gt_boxes, example_torch['rect'][0,:], example_torch['Trv2c'][0,:])
+
                     d3_gt_boxes_camera_bev = d3_gt_boxes_camera[:,[0,2,3,5,6]]
                     ###### predicted bev boxes
                     pred_3d_box = all_3d_output_camera_dict[0]["box3d_camera"]
@@ -424,17 +429,21 @@ def train(config_path,
                     #iou_bev = bev_box_overlap(d3_gt_boxes_camera_bev.detach().cpu().numpy(), pred_bev_box.detach().cpu().numpy(), criterion=-1)
                     iou_bev = d3_box_overlap(d3_gt_boxes_camera.detach().cpu().numpy(), pred_3d_box.squeeze().detach().cpu().numpy(), criterion=-1)
                     iou_bev_max = np.amax(iou_bev,axis=0)
+
+                    torch.cuda.synchronize()
+                    t = time.time()
                     #print(np.max(iou_bev_max))
                     target_for_fusion = ((iou_bev_max >= 0.7)*1).reshape(1,-1,1)
                     target_for_fusion = target_for_fusion.astype(np.float32)
                     positive_index = ((iou_bev_max >= 0.7)*1).reshape(1,-1)
+
                     positive_index = positive_index.astype(np.float32)
                     positives = torch.from_numpy(positive_index).type(torch.float32).cuda()
                     negative_index = ((iou_bev_max <= 0.5)*1).reshape(1,-1)
                     negative_index = negative_index.astype(np.float32)                          ##不加这3个转换在torch中转换的话一共慢200~300ms
                     negatives = torch.from_numpy(negative_index).type(torch.float32).cuda()     #[1, 107136]
+                    torch.cuda.synchronize()
 
-                cls_preds, flag = fusion_layer(fusion_input.cuda(), tensor_index.cuda())
                 one_hot_targets = torch.from_numpy(target_for_fusion).type(torch.float32).cuda()
 
                 #print("negatives.shape: \n", negatives.shape)
@@ -636,6 +645,7 @@ def _predict_kitti_to_file(net,
     all_3d_output_dict = {}
     all_3d_output_dict["box_preds"] = all_3d_output[0]
     all_3d_output_dict["cls_preds"] = all_3d_output[1]
+    all_3d_output_dict.update({'cls_preds': fusion_cls_preds_reshape})
     all_3d_output_dict["dir_cls_preds"] = all_3d_output[2]
 
     predictions_dicts = predict_pp(net, example, all_3d_output_dict)
@@ -775,7 +785,7 @@ def predict_kitti_to_anno(net,
     predictions_dicts = predict_pp(net, example, all_3d_output_dict)
     torch.cuda.synchronize()
     net._total_predict_pp_time += time.time() - t
-    print("avg predict pp time: ", net._total_predict_pp_time/net._total_inference_count*1000)
+    #print("avg predict pp time: ", net._total_predict_pp_time/net._total_inference_count*1000)
 
     #print("predict_kitti_to_anno net time1: ", (time.time() - time1) * 1000)
     training_flag=False
@@ -1117,11 +1127,7 @@ def evaluate(config_path,
         print("dt_annos:\n", len(dt_annos))
         result = get_official_eval_result(gt_annos, dt_annos, class_names)
         print(result)
-        """
-        #有bug暂未解决
-        result = get_coco_eval_result(gt_annos, dt_annos, class_names)
-        print(result)
-        """
+
         if pickle_result:
             with open(result_path_step / "result.pkl", 'wb') as f:
                 pickle.dump(dt_annos, f)
@@ -1320,9 +1326,6 @@ def predict_pp(net, example, preds_dict):
     batch_box_preds = batch_box_preds.view(batch_size, -1,
                                            net._box_coder.code_size)
 
-    print("achorss mast shape: ", batch_anchors_mask.shape)
-    print("batch_box_preds sshpe", batch_box_preds.shape)
-
     num_class_with_bg = net._num_class
     if not net._encode_background_as_zeros:
         num_class_with_bg = net._num_class + 1
@@ -1372,7 +1375,6 @@ def predict_pp(net, example, preds_dict):
         if a_mask is not None:
             box_preds = box_preds[a_mask]
             cls_preds = cls_preds[a_mask]
-            print("box_preds.shaaape: ", box_preds.shape)
 
         if net._use_direction_classifier:
             if a_mask is not None:

@@ -200,4 +200,6 @@ eval_input_reader: {
   remove_environment: false
   kitti_info_path: "/mengxing/Data/Sets/kitti_pointpillars/kitti_infos_val.pkl"
   kitti_root_path: "/mengxing/Data/Sets/kitti_pointpillars"
+  #kitti_info_path: "/mengxing/Data/Sets/raw_data/CLOCs_preprocess/object_format_2011_09_26_drive_0005/kitti_infos_test.pkl"
+  #kitti_root_path: "/mengxing/Data/Sets/raw_data/CLOCs_preprocess/object_format_2011_09_26_drive_0005"
 }
