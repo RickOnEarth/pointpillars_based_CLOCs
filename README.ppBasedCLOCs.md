@@ -77,14 +77,20 @@ config中raw_data路径如下
 ```
 
 
-## 2022-01-04  
-add CLOCs_fusion module  
+## 2022-01-04
+add CLOCs_fusion module：second/CLOCs_fusion
 ```text
 return preds_dict    #voxelnet.py/VoxelNet/forward()中添加return preds_dict
 ```
-run （only for inference）
+原来在voxelnet.py中做fusion的方式写法太乱，废弃不用
+
+train  
 ```text
- python ./pytorch/CLOCs_test.py evaluate --config_path=configs/pointpillars/car/CLOCs_xyres_16.proto --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=model_dirs/model_CLOCs_temp/
+python ./pytorch/CLOCs_test.py train --config_path=configs/pointpillars/car/CLOCs_xyres_16.proto --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=model_dirs/model_CLOCs_temp/
+```
+evaluate 
+```text
+python ./pytorch/CLOCs_test.py evaluate --config_path=configs/pointpillars/car/CLOCs_xyres_16.proto --d2_path=../d2_detection_data_yolo_nms_0.6 --model_dir=model_dirs/model_CLOCs_temp/
 ```
 
 

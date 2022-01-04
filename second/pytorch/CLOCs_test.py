@@ -405,8 +405,14 @@ def train(config_path,
                          num_points_per_pillar, x_sub_shaped, y_sub_shaped,
                          mask, coors, anchors, anchors_mask, rect, Trv2c, P2, image_idx, batch_image_shape]
 
-                all_3d_output_camera_dict, all_3d_output, top_predictions, fusion_input, tensor_index = net(input,
-                                                                                                           detection_2d_path)
+                # all_3d_output_camera_dict, all_3d_output, top_predictions, fusion_input, tensor_index = net(input,
+                #                                                                                            detection_2d_path)
+                all_3d_output = net(input, detection_2d_path)
+
+                all_3d_output_camera_dict, top_predictions, fusion_input, tensor_index = preprocess_for_fusion(net,
+                                                                                                              example_torch,
+                                                                                                              all_3d_output,
+                                                                                                              train_flag=True)
 
                 cls_preds, flag = fusion_layer(fusion_input.cuda(), tensor_index.cuda())
 
@@ -426,7 +432,7 @@ def train(config_path,
 
                     d3_gt_boxes_camera_bev = d3_gt_boxes_camera[:,[0,2,3,5,6]]
                     ###### predicted bev boxes
-                    pred_3d_box = all_3d_output_camera_dict[0]["box3d_camera"]
+                    pred_3d_box = all_3d_output_camera_dict["box3d_camera"]
                     pred_bev_box = pred_3d_box[:,[0,2,3,5,6]]
                     #iou_bev = bev_box_overlap(d3_gt_boxes_camera_bev.detach().cpu().numpy(), pred_bev_box.detach().cpu().numpy(), criterion=-1)
                     iou_bev = d3_box_overlap(d3_gt_boxes_camera.detach().cpu().numpy(), pred_3d_box.squeeze().detach().cpu().numpy(), criterion=-1)
@@ -518,7 +524,7 @@ def train(config_path,
                 if pickle_result:
                     dt_annos_i, val_losses = predict_kitti_to_anno(
                         net, detection_2d_path, fusion_layer, example, class_names, center_limit_range,
-                        model_cfg.lidar_input)
+                        model_cfg.lidar_input, need_loss=True)
                     dt_annos+= dt_annos_i
                     val_loss_final = val_loss_final + val_losses
                 else:
@@ -629,7 +635,11 @@ def _predict_kitti_to_file(net,
              num_points_per_pillar, x_sub_shaped, y_sub_shaped,
              mask, coors, anchors, anchors_mask, rect, Trv2c, P2, image_idx, batch_image_shape]
 
-    all_3d_output_camera_dict, all_3d_output, top_predictions, fusion_input, torch_index = net(input, detection_2d_path)
+    #all_3d_output_camera_dict, all_3d_output, top_predictions, fusion_input, torch_index = net(input, detection_2d_path)
+
+    all_3d_output = net(input, detection_2d_path)
+
+    all_3d_output_camera_dict, top_predictions, fusion_input, torch_index = preprocess_for_fusion(net, example, all_3d_output, train_flag=False)
 
     #print("fusion_input.shape: \n", fusion_input.shape)         #例：[1, 4, 1, 193283]
     time_fusion_start = time.time()
@@ -714,7 +724,8 @@ def predict_kitti_to_anno(net,
                           class_names,
                           center_limit_range=None,
                           lidar_input=False,
-                          global_set=None):
+                          global_set=None,
+                          need_loss=False):
     time1 = time.time()
     # eval example : [0: 'voxels', 1: 'num_points', 2: 'coordinates', 3: 'rect'
     #                 4: 'Trv2c', 5: 'P2', 6: 'anchors', 7: 'anchors_mask'
@@ -786,52 +797,50 @@ def predict_kitti_to_anno(net,
 
     predictions_dicts = predict_pp(net, example, all_3d_output_dict)
 
-    cls_losses_reduced = 0
-    # training_flag=False
-    # if training_flag==True:
-    #     d3_gt_boxes = example["d3_gt_boxes"][0,:,:]
-    #     if d3_gt_boxes.shape[0] == 0:
-    #         target_for_fusion = np.zeros((1,107136,1))
-    #         positives = torch.zeros(1,107136).type(torch.float64).cuda()
-    #         negatives = torch.zeros(1,107136).type(torch.float64).cuda()
-    #         negatives[:,:] = 1
-    #     else:                                                               #do
-    #         d3_gt_boxes_camera = box_torch_ops.box_lidar_to_camera(
-    #             d3_gt_boxes, example['rect'][0,:], example['Trv2c'][0,:])
-    #         d3_gt_boxes_camera_bev = d3_gt_boxes_camera[:,[0,2,3,5,6]]
-    #         ###### predicted bev boxes
-    #         pred_3d_box = all_3d_output_camera_dict[0]["box3d_camera"]
-    #         pred_bev_box = pred_3d_box[:,[0,2,3,5,6]]
-    #         #iou_bev = bev_box_overlap(d3_gt_boxes_camera_bev.detach().cpu().numpy(), pred_bev_box.detach().cpu().numpy(), criterion=-1)
-    #         iou_bev = d3_box_overlap(d3_gt_boxes_camera.detach().cpu().numpy(), pred_3d_box.squeeze().detach().cpu().numpy(), criterion=-1)
-    #         iou_bev_max = np.amax(iou_bev,axis=0)
-    #         time2 = time.time()
-    #         target_for_fusion = ((iou_bev_max >= 0.7)*1).reshape(1,-1,1)
-    #         target_for_fusion = target_for_fusion.astype(np.float32)
-    #         positive_index = ((iou_bev_max >= 0.7)*1).reshape(1,-1)
-    #         positive_index = positive_index.astype(np.float32)
-    #         positives = torch.from_numpy(positive_index).type(torch.float32).cuda()
-    #         negative_index = ((iou_bev_max <= 0.5)*1).reshape(1,-1)
-    #         negative_index = negative_index.astype(np.float32)                              #不加这3个转换在torch中转换的话一共慢200~300ms
-    #         negatives = torch.from_numpy(negative_index).type(torch.float32).cuda()
-    #         #print("predict_kitti_to_anno net time2: ", (time.time() - time2) * 1000)
-    #     cls_preds = fusion_cls_preds
-    #
-    #     one_hot_targets = torch.from_numpy(target_for_fusion).type(torch.float32).cuda()
-    #     #one_hot_targets = torch.as_tensor(target_for_fusion).type(torch.float32).cuda()
-    #
-    #     negative_cls_weights = negatives.type(torch.float32) * 1.0
-    #     cls_weights = negative_cls_weights + 1.0 * positives.type(torch.float32)
-    #     pos_normalizer = positives.sum(1, keepdim=True).type(torch.float32)
-    #     cls_weights /= torch.clamp(pos_normalizer, min=1.0)
-    #
-    #     cls_losses = focal_loss_val._compute_loss(cls_preds, one_hot_targets, cls_weights.cuda())  # [N, M]     #20~100ms
-    #     cls_losses_reduced = cls_losses.sum()/example['labels'].shape[0]
-    #     cls_losses_reduced = cls_losses_reduced.detach().cpu().numpy()
-    #
-    # else:
-    #     cls_losses_reduced = 1000
-    # # print("cls_losses_reduced:\n", cls_losses_reduced)
+    if need_loss:
+        d3_gt_boxes = example["d3_gt_boxes"][0,:,:]
+        if d3_gt_boxes.shape[0] == 0:
+            target_for_fusion = np.zeros((1,107136,1))
+            positives = torch.zeros(1,107136).type(torch.float64).cuda()
+            negatives = torch.zeros(1,107136).type(torch.float64).cuda()
+            negatives[:,:] = 1
+        else:                                                               #do
+            d3_gt_boxes_camera = box_torch_ops.box_lidar_to_camera(
+                d3_gt_boxes, example['rect'][0,:], example['Trv2c'][0,:])
+            d3_gt_boxes_camera_bev = d3_gt_boxes_camera[:,[0,2,3,5,6]]
+            ###### predicted bev boxes
+            pred_3d_box = all_3d_output_camera_dict[0]["box3d_camera"]
+            pred_bev_box = pred_3d_box[:,[0,2,3,5,6]]
+            #iou_bev = bev_box_overlap(d3_gt_boxes_camera_bev.detach().cpu().numpy(), pred_bev_box.detach().cpu().numpy(), criterion=-1)
+            iou_bev = d3_box_overlap(d3_gt_boxes_camera.detach().cpu().numpy(), pred_3d_box.squeeze().detach().cpu().numpy(), criterion=-1)
+            iou_bev_max = np.amax(iou_bev,axis=0)
+            time2 = time.time()
+            target_for_fusion = ((iou_bev_max >= 0.7)*1).reshape(1,-1,1)
+            target_for_fusion = target_for_fusion.astype(np.float32)
+            positive_index = ((iou_bev_max >= 0.7)*1).reshape(1,-1)
+            positive_index = positive_index.astype(np.float32)
+            positives = torch.from_numpy(positive_index).type(torch.float32).cuda()
+            negative_index = ((iou_bev_max <= 0.5)*1).reshape(1,-1)
+            negative_index = negative_index.astype(np.float32)                              #不加这3个转换在torch中转换的话一共慢200~300ms
+            negatives = torch.from_numpy(negative_index).type(torch.float32).cuda()
+            #print("predict_kitti_to_anno net time2: ", (time.time() - time2) * 1000)
+        cls_preds = fusion_cls_preds
+
+        one_hot_targets = torch.from_numpy(target_for_fusion).type(torch.float32).cuda()
+        #one_hot_targets = torch.as_tensor(target_for_fusion).type(torch.float32).cuda()
+
+        negative_cls_weights = negatives.type(torch.float32) * 1.0
+        cls_weights = negative_cls_weights + 1.0 * positives.type(torch.float32)
+        pos_normalizer = positives.sum(1, keepdim=True).type(torch.float32)
+        cls_weights /= torch.clamp(pos_normalizer, min=1.0)
+
+        cls_losses = focal_loss_val._compute_loss(cls_preds, one_hot_targets, cls_weights.cuda())  # [N, M]     #20~100ms
+        cls_losses_reduced = cls_losses.sum()/example['labels'].shape[0]
+        cls_losses_reduced = cls_losses_reduced.detach().cpu().numpy()
+
+    else:
+        cls_losses_reduced = 1000
+    # print("cls_losses_reduced:\n", cls_losses_reduced)
 
     annos = []
     for i, preds_dict in enumerate(predictions_dicts):
