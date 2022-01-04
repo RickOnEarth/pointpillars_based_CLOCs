@@ -41,10 +41,11 @@ def preprocess_for_fusion(net, example, preds_dict, train_flag=True):
         P2 = P2.float()
 
         total_scores = torch.sigmoid(cls_preds)
-        dis_to_lidar = torch.norm(box_preds[:, :2], p=2, dim=1, keepdim=True) / 82.0
 
         final_box_preds = net._box_coder.decode_torch(box_preds, anchors)        #decode!
         final_scores = total_scores
+
+        dis_to_lidar = torch.norm(final_box_preds[:, :2], p=2, dim=1, keepdim=True) / 82.0
 
         final_box_preds_camera = box_torch_ops.box_lidar_to_camera(final_box_preds, rect, Trv2c)
 
