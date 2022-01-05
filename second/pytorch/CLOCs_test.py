@@ -809,7 +809,7 @@ def predict_kitti_to_anno(net,
                 d3_gt_boxes, example['rect'][0,:], example['Trv2c'][0,:])
             d3_gt_boxes_camera_bev = d3_gt_boxes_camera[:,[0,2,3,5,6]]
             ###### predicted bev boxes
-            pred_3d_box = all_3d_output_camera_dict[0]["box3d_camera"]
+            pred_3d_box = all_3d_output_camera_dict["box3d_camera"]
             pred_bev_box = pred_3d_box[:,[0,2,3,5,6]]
             #iou_bev = bev_box_overlap(d3_gt_boxes_camera_bev.detach().cpu().numpy(), pred_bev_box.detach().cpu().numpy(), criterion=-1)
             iou_bev = d3_box_overlap(d3_gt_boxes_camera.detach().cpu().numpy(), pred_3d_box.squeeze().detach().cpu().numpy(), criterion=-1)
